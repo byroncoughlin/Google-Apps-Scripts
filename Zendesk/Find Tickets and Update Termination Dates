@@ -1,0 +1,145 @@
+function updateTermTicketDate() {
+    
+    //searches Zendesk and returns an array of tickets
+    var url = 'https://hioscarsupport.zendesk.com/api/v2/search.json?query=form%3A%22termination%20form%22%20status%3Csolved%20-custom_field_1500009686181%3A%2A%20This%20email%20was%20intended%20for%20eo-termination'
+
+    var user = 'usernameHere/token';
+    var pwd = 'tokenHere';
+
+    var headers = { "Accept":"application/json",
+    "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+    };
+    var options = { "method":"Get",
+    "headers": headers,
+    "contentType": "application/json",
+    "muteHttpExceptions":true
+    };
+    var response = UrlFetchApp.fetch(url, options);
+
+    let parsed;
+    var ticketArray;
+
+    try {
+      ticketArray = JSON.parse(response);
+      console.log('✅ JSON array parsed successfully');
+    } catch (err) {
+      console.log('⛔️ invalid JSON provided');
+      // report error
+    }
+
+
+    console.log("found "+ticketArray.results.length+" tickets that match this search.");
+    
+    //act on each ticket
+    for(var i = 0; i < ticketArray.results.length; i++)
+    {
+      try {
+        
+        //add in a last minute check
+        var allOK=true;
+
+        var ticket = ticketArray.results[i];
+        
+        //get ticket id
+        var ticketNumber = ticket.id;
+        Logger.log("Ticket Number:");
+        Logger.log(ticketNumber);
+
+        var ticketCustomFields = ticket.custom_fields;
+        for(var k = 0; k < ticketCustomFields.length; k++)
+        {
+          var ticketCustomField = ticketCustomFields[k];
+          if (ticketCustomField.id == 1500009686181){
+            console.log (ticketCustomField);
+            console.log(ticketCustomField.value);
+            //console.log(ticketCustomField.value.length)
+            if (ticketCustomField.value != null){
+                console.log("Found non-null Date");
+                allOK=false;
+            }
+          }
+        }
+        //console.log(ticketCustomFields);
+
+        if (allOK){
+
+          var ticketDescription = ticket.description;
+          
+          //get effective date
+          var firstSplitText = ticketDescription.split('effective on ');
+          var secondSplitText = firstSplitText[1].split(/\n/);
+          var effectiveDate = secondSplitText[0];
+          Logger.log("Effective Date");
+          Logger.log(effectiveDate);
+
+          //format date for ZD (needs year month day)
+          var formattedDate = formatDate(effectiveDate);
+          console.log(formattedDate);
+
+          //build data for request
+          var data = {ticket: {
+            custom_fields: [
+              {
+                //Effective Date
+                id: 1500009686181,
+                value: formattedDate
+              }
+            ]
+            }};
+
+          var payload = JSON.stringify(data);
+          Logger.log(payload);
+
+          var url = 'https://hioscarsupport.zendesk.com/api/v2/tickets/'+ticketNumber+'.json';
+          var user = 'usernameHere/token';
+          var pwd = 'tokenHere';
+
+          var headers = { "Accept":"application/json",
+          "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+          };
+          var options = { "method":"PUT",
+          "headers": headers,
+          "contentType": "application/json",
+          "payload": payload,
+          "muteHttpExceptions":true
+          };
+          var response = UrlFetchApp.fetch(url, options);
+          //Logger.log(response.getContentText());
+        
+          //var responseText = response.getContentText();
+      
+          Logger.log("✅ ok on Date");
+
+
+
+        //allok check
+        
+        }else{   
+          console.log("Failed allok check")
+        }
+      
+      }catch(err) {
+          console.log("reached catch");
+          console.log(err.message);
+      }
+
+    }//end of loop
+
+    //console.log(ticketArray);
+    
+
+
+    //Logger.log(response.getContentText());
+
+
+}
+
+//09/30/2022
+function formatDate(date) {
+    var dateArray = date.split("/");
+    var month = dateArray[0];
+    var day = dateArray[1];
+    var year = dateArray[2];
+
+    return [year, month, day].join('-');
+}
