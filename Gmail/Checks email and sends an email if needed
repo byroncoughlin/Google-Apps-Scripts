@@ -1,0 +1,314 @@
+//the purpose of this email is to monitor the eo-new hire inbox and watch for any emails in the label '1. Queued New Hire Emails'. This is currently set to run every 5 minutes to check for contractors or new hires that were entered past the 2-week deadline.
+
+//dec 8 2022, if mario is the manager, do not email mario.
+
+
+function myFunction() {
+
+  const BPOManagerEmails = ["justin@EmailRemoved", "jguilbeau@EmailRemoved", "cdomaleski@EmailRemoved", "abaker@EmailRemoved", "paloma@EmailRemoved", "sghasedi@EmailRemoved", "eunice@EmailRemoved"];
+
+  var queueLabel = GmailApp.getUserLabelByName('1. Queued New Hire Emails');
+  var checkedLabel = GmailApp.getUserLabelByName('2. Checked Emails');
+  var issueLabel = GmailApp.getUserLabelByName('3. Issue Emails');
+  //var issueLabel2 = GmailApp.getUserLabelByName('4.');
+
+  var todayDate = Utilities.formatDate(new Date(), "GMT-4", "MM/dd/yyyy")
+
+  var messages, message, messageBody;
+  
+  Logger.log(todayDate);
+
+
+  if(queueLabel != null){
+    var threads = queueLabel.getThreads();
+    for (var i=0; i<threads.length; i++) {
+      //Process them in the order received
+      threads[i].removeLabel(queueLabel);
+      threads[i].addLabel(checkedLabel);
+      
+      messages = threads[i].getMessages();
+
+      //Logger.log(threads);
+      //we only need to act on the most recent message per thread
+
+      message = messages[(messages.length-1)]
+
+      Logger.log(message);
+      Logger.log(messages.length);
+
+      //check if message date is more than 1 day ago, if so: skip
+      var messageDate=message.getDate();
+      var todayDateForMessage = new Date();
+      Logger.log("How old is message");
+      Logger.log(DateDiff.inDays(messageDate, todayDateForMessage));  
+      if (DateDiff.inDays(messageDate, todayDateForMessage) > 1){
+        //email was over a 1 day ago
+        Logger.log("Email was detected as being over 1 day old. Skipping");
+        continue;
+      }
+
+      messageBody = message.getPlainBody(); 
+      Logger.log(messageBody);
+
+
+      //get date//--------------------------------------------------------
+      var splitBody = messageBody.split('effective on ');
+
+      Logger.log(splitBody[1]);
+
+      var textDate = splitBody[1].substring(0,10)
+
+      var year = textDate.substring(6,10)
+      var month = textDate.substring(0,2)
+      var day = textDate.substring(3,5)
+
+      var startDate = new Date(year, month - 1, day)
+
+      Logger.log("startDate:")
+      Logger.log(startDate);
+
+
+
+      //calculate days between dates//------------------------------------------
+
+      var hd=startDate.valueOf();
+      var td=new Date().valueOf();
+      var sec=1000;
+      var min=60*sec;
+      var hour=60*min;
+      var day=24*hour;
+      var diff=hd-td;
+      var days=Math.floor(diff/day);
+      var hours=Math.floor(diff%day/hour);
+      var minutes=Math.floor(diff%day%hour/min);
+      Logger.log('%s days %s hours %s minutes',days,hours,minutes);
+
+
+      //If days are less than 13, act on this email
+      if (days<13){
+        Logger.log("detected below 13");
+        
+        //check if email contains manager email
+        if (messageBody.includes('Manager Email: ')){
+        }else{
+           continue;
+        }
+
+        //get manager email
+        var splitBody = messageBody.split('Manager Email: ');
+
+      Logger.log(splitBody[1]);
+
+      var managerEmail = splitBody[1].split('\n')[0];
+      Logger.log(managerEmail);
+    
+      //use this for testing
+      //managerEmail = "byron@EmailRemoved ";
+      //Logger.log(managerEmail);
+
+      //remove any spaces from this email
+      managerEmail = managerEmail.replace(/\s+/g, '');
+
+      if (managerEmail=="mario@EmailRemoved"){
+        managerEmail=="";
+      }
+
+      if (BPOManagerEmails.includes(managerEmail)){
+        Logger.log("detected BPO email")
+        continue;
+      }
+
+      //categorize as issue email
+      threads[i].addLabel(issueLabel);
+      Logger.log("Applied Label "+issueLabel);
+
+      //iterating through the email and getting the rest of the details now
+
+      var messageLines=messageBody.split(/\n/);
+      for (var j=0; j<messageLines.length; j++) {
+      let thisLine = messageLines[j];
+      //Logger.log (thisLine);
+      
+      if (thisLine.includes("Business Process: ")){
+        var splitText = thisLine.split('Business Process: ');
+        var businessProcessText = splitText[1];
+        Logger.log("Business Process Text");
+        Logger.log(businessProcessText);
+      }else if(thisLine.includes("Subject: ")){
+        var splitText = thisLine.split('Subject: ');
+        var subjectText = splitText[1];
+        Logger.log("SubjectT Text");
+        Logger.log(subjectText);
+      }else if(thisLine.includes("Details: ")){
+        Logger.log(thisLine);
+        var splitText = thisLine.split('Details: ');
+        if (messageLines[(j+1)].includes("effective on")){
+          var detailsText = splitText[1]+messageLines[(j+1)];
+        }else if(messageLines[(j+2)].includes("effective on")){
+          var detailsText = splitText[1]+messageLines[(j+1)]+messageLines[(j+2)];
+        }else{
+          var detailsText = splitText[1];
+        }
+        Logger.log("DetailsText");
+        Logger.log(detailsText);
+        
+        if (detailsText.includes("Conversion")){
+          Logger.log("Conversion detected")
+          continue;
+        }
+
+        splitText = detailsText.split('effective on ');
+        var effectiveDate = splitText[1];
+        Logger.log("Effective Date");
+        Logger.log(effectiveDate);
+        
+        splitText = detailsText.split(' for ');
+        var employeeName = splitText[1]
+
+        splitText = employeeName.split(' effective');
+        employeeName = splitText[0];
+        Logger.log(employeeName);
+      }else if(thisLine.includes("email-universal")){
+        var splitText = thisLine.split('<');
+        var url1 = splitText[1];
+        var url1 = url1.substring(0, url1.length - 2);
+        Logger.log(url1);
+
+      }else if(thisLine.includes("d/task")){
+        var splitText = thisLine.split('<');
+        var url2 = splitText[1];
+        var url2 = url2.substring(0, url2.length - 2);
+        Logger.log(url2);
+      }
+      
+    }
+
+
+
+      //load the image to embed
+      var imgBlob = DriveApp.getFileById("1_apos8U7-vv-IQiA2LvjLgvMXLuTkUIH")
+                     .getBlob()
+                     .setName("imgBlob");
+
+      //determine if contingent worker or FTE
+      if (message.getSubject().includes('Contract Contingent Worker')){
+        // this is a late entry contingent worker - send an email to the manager, cc PSC, and itteam
+
+        MailApp.sendEmail({
+          to: managerEmail,
+          subject: employeeName + " Start Date",
+          htmlBody: "Hi there,<br><br>" +
+
+          "I hope you are well, it was detected that this contractor, "+employeeName+" was not fully through Workday in time for the 2-week hiring deadline. This contractor was entered with a start date of " + effectiveDate + " which does not meet the 2-week hiring policy.<br><br>" + 
+          
+"If this Contingent Worker was part of a Full Time Employee to Contingent Worker conversion, please reply-all to this email and inform IT that this is a FTE to CW conversion.<br><br>" +
+          
+"Contractors entered past the hiring deadline were not included in the finalized report (sent to IT the day after the deadline) and would not have been included in the hardware order, account creation, or onboarding communication which is based off of this report. <br><br>" +
+
+"The deadline for submitting contractors is the end of day Monday two weeks before each start date. This policy is <a href='https://docs.google.com/document/d/1TuD2BR5LW1jV4YXW6e-vWiD2Si1f0PvEAGQdQVLRkcg/edit#'>outlined here</a> and <a href='https://confluence.hioscar.com/display/PO/Hiring+at+Oscar#ITOnboarding'>here</a>. <br><br>" +
+
+"This requirement is the same for anyone who needs an Oscar laptop shipped to them (new hires, contingent workers, contractors, and consultants).<br><br>" +
+
+"The two-week requirement allows Oscar IT to order appropriate hardware, create Oscar accounts, enroll the devices through Oscar's vendors, and time for the new hire to log into and configure their Oscar computer leading up to the IT onboarding session on their start date (where they are given access to all of their Oscar accounts).<br><br>" +
+
+"<img src='cid:start_date_image' width='700'><br><br>" +
+
+"The Oscar IT team is passionate about providing the best IT support in the world, and any exceptions to their procedures take resources away from their team and make it more difficult to achieve this goal.<br><br>" +
+
+"Please email PeopleServiceCenter@EmailRemoved (or reply to them here) to adjust this contingent worker start date to the next available start date (any non-holiday Monday that follows the 2-week policy, or any start date listed on <a href='https://confluence.hioscar.com/display/PO/2022+Orientation+Dates'>Oscar's orientations page</a>)<br><br>" +
+
+"Thank you,<br>"+
+"Oscar IT",
+          inlineImages:
+          {
+            start_date_image: imgBlob
+          },
+          cc: 'itteam@EmailRemoved, peopleservicecenter@EmailRemoved',
+        });
+
+        Logger.log("Email Sent!");
+
+      }else if (message.getSubject().includes('Hire - ')){
+        // this is a late entry FTE - send an email to recruiting, cc manager, PSC, and itteam
+        MailApp.sendEmail({
+          to: "recruiting@EmailRemoved",
+          subject: employeeName + " Start Date",
+          htmlBody: "Hi Recruiting Team,<br><br>" +
+
+          "I hope you are well, it was detected that this new hire, "+employeeName+" was not entered & approved in Workday in time for the 2-week hiring deadline. This new hire was entered with a start date of " + effectiveDate + " which does not meet the 2-week hiring policy.<br><br>" +
+
+"If this Employee was part of a Contingent Worker to Full Time Employee conversion, please reply-all to this email and inform IT that this is a CW to FTE conversion.<br><br>" +          
+
+"New hires entered into Workday past the hiring deadline were not included in the finalized report (sent to IT the day after the deadline) and would not have been included in the hardware order, account creation, or onboarding communication which is based off of this report. <br><br>" +
+
+"The deadline for submitting new hires is the end of day Monday two weeks before each start date. This policy is <a href='https://confluence.hioscar.com/display/PO/Hiring+at+Oscar#ITOnboarding'>outlined here</a>.<br><br>" +
+
+"This requirement is the same for anyone who needs an Oscar laptop shipped to them (new hires, contingent workers, contractors, and consultants).<br><br>" +
+
+"The two-week requirement allows Oscar IT to order appropriate hardware, create Oscar accounts, enroll the devices through Oscar's vendors, and time for the new hire to log into and configure their Oscar computer leading up to the IT onboarding session on their start date (where they are given access to all of their Oscar accounts).<br><br>" +
+
+"<img src='cid:start_date_image' width='700'><br><br>" +
+
+"The Oscar IT team is passionate about providing the best IT support in the world, and any exceptions to their procedures take resources away from their team and make it more difficult to achieve this goal.<br><br>" +
+
+"Please email PeopleServiceCenter@EmailRemoved (or reply to them here) to adjust this new hire's start date to the next available start date listed on <a href='https://confluence.hioscar.com/display/PO/2022+Orientation+Dates'>Oscar's orientations page</a>)<br><br>" +
+
+"Oscar IT holds IT onboardings every non-Oscar holiday Monday. If you would like to request that a new hire start on a Monday (more than 2 weeks away) that is not listed on the orientation dates linked above, please include NewHireOrientation@EmailRemoved and Payroll@EmailRemoved on this email chain for approval of an off cycle start date (where the new hire would attend IT Onboarding one week, and the Oscar orientation classes the next week).<br><br>" +
+
+"Thank you,<br>"+
+"Oscar IT",
+          inlineImages:
+          {
+            start_date_image: imgBlob
+          },
+          cc: managerEmail + ', itteam@EmailRemoved, peopleservicecenter@EmailRemoved',
+        });
+
+        Logger.log("Email Sent!");
+
+
+      }else{
+        //unknown type
+        Logger.log("detected as unknown type of issue email")
+      }
+
+
+
+        //threads[i].addLabel(issueLabel2);
+        //Logger.log("Applied Label"+issueLabel2);
+        threads[i].markUnread();
+      }
+    
+    }
+  }
+
+
+}
+
+
+
+var DateDiff = {    
+    inDays: function(d1, d2) {
+        var t2 = d2.getTime();
+        var t1 = d1.getTime();
+
+        return parseInt((t2-t1)/(24*3600*1000));
+    },
+    inWeeks: function(d1, d2) {
+        var t2 = d2.getTime();
+        var t1 = d1.getTime();
+
+        return parseInt((t2-t1)/(24*3600*1000*7));
+    },
+    inMonths: function(d1, d2) {
+        var d1Y = d1.getFullYear();
+        var d2Y = d2.getFullYear();
+        var d1M = d1.getMonth();
+        var d2M = d2.getMonth();
+
+        return (d2M+12*d2Y)-(d1M+12*d1Y);
+    },
+    inYears: function(d1, d2) {
+        return d2.getFullYear()-d1.getFullYear();
+    }
+}
