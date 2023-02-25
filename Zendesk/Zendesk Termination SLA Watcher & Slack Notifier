@@ -4,7 +4,7 @@ function checkTerminationTickets() {
     //get tickets
     var url = 'https://hioscarsupport.zendesk.com/api/v2/search.json?query=form%3A%22termination%20form%22%20status%3Cpending%20custom_field_1500009686181%3A%2A'
     
-    var user = 'itteamzendesk@hioscar.com/token';
+    var user = 'userNameHere/token';
     var pwd = 'tokenHere';
 
     var headers = { "Accept":"application/json",
