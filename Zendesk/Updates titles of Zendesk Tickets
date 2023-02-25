@@ -1,0 +1,180 @@
+function updateTermTicketTitle() {
+    
+    //searches Zendesk and returns an array of tickets
+    //var url = 'https://hioscarsupport.zendesk.com/api/v2/search.json?query=form%3A%22termination%20form%22%20This%20email%20was%20intended%20for%20eo-termination%20status%3Csolved%20order_by%3Acreated_at%20sort%3Adesc'
+
+
+    //set up request to define search parameters within Zendesk search bar (customer search begins after query=)
+    //form:"termination form" This email was intended for eo-termination status<solved order_by:created_at sort:desc created>2022-12-15 -tag:term_title_updated
+    var url = 'https://hioscarsupport.zendesk.com/api/v2/search.json?query=form%3A%22termination+form%22+This+email+was+intended+for+eo-termination+status%3Csolved+order_by%3Acreated_at+sort%3Adesc+created%3E2022-12-15'
+// Default script to send to Zendesk API (ends after var response =UrlFetchApp)
+    var user = 'usernameHere/token';
+    var pwd = 'tokenHere';
+
+    var headers = { "Accept":"application/json",
+    "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+    };
+    var options = { "method":"Get",
+    "headers": headers,
+    "contentType": "application/json",
+    "muteHttpExceptions":true
+    };
+    var response = UrlFetchApp.fetch(url, options);
+
+
+//try function converts to javascript array 
+    try {
+      ticketArray = JSON.parse(response);
+      console.log('✅ JSON array parsed successfully');
+    } catch (err) {
+      console.log('⛔️ invalid JSON provided');
+      // report error
+    }
+// Logging what tickets were discovered or returned
+    //console.log(ticketArray);
+
+// Logging how many tickets were returned 
+    console.log("found "+ticketArray.results.length+" tickets that match this search.");
+    
+
+    //act on each ticket within array
+    for(var i = 0; i < ticketArray.results.length; i++)
+    {
+      try {
+
+        var ticket=ticketArray.results[i];
+
+        console.log("we are working on this ticket:");
+        console.log(i);
+        console.log(ticket.id);
+
+        //the very first thing to check is if the ticket has the "term_title_updated" tag - if it does, skip this ticket
+        var tagExists=false;
+        for (j=0; j<ticket.tags.length; j++){    //<- I changed this to be j instead of i - I think it was conflicting with the "i" loop above -Byron
+          console.log(ticket.tags[j]);
+          if (ticket.tags[j]=="term_title_updated"){
+            console.log("Tag is found!");
+            tagExists=true;
+          }
+        }
+
+        //get ticket id
+        var ticketNumber = ticket.id;
+        //Logger.log("Ticket Number:");
+        //Logger.log(ticketNumber);
+
+
+        if (tagExists){
+          //skip this ticket
+          continue; //<- I changed this to be "continue" instead of "break" -Byron
+        }
+
+
+        //Attempting to get employee name and termination date for tickets 
+        var businessProcess;
+        var effectiveDate;
+        var ticketDescription = ticket.description;
+
+        //get effective date
+
+        //split text within the ticket description after the string 'effective on' to display date 
+          var firstSplitText = ticketDescription.split('effective on ');
+          console.log ("this is what is contained within the firstsplittext variable for 0")
+          console.log (firstSplitText[0]);
+          console.log ("this is what is contained within the firstsplittext variable for 1")
+          console.log (firstSplitText[1]);
+        // Use console.log command to check what is within firstsplittext 0 & 1
+        // Split text again based on the return character (enter key) which leaves us with the effective date ie: 10/15/2022
+          var secondSplitText = firstSplitText[1].split(/\n/);
+          var effectiveDate = secondSplitText[0];
+          Logger.log("Effective Date");
+          Logger.log(effectiveDate);
+
+        // Getting business process for action
+        
+          //split text within the ticket description after the string 'business process' to display business process 
+          var firstSplitText = ticketDescription.split('Business Process: ');
+          console.log ("this is what is contained within the firstsplittext variable for 0")
+          console.log (firstSplitText[0]);
+          console.log ("this is what is contained within the firstsplittext variable for 1")
+          console.log (firstSplitText[1]);
+        // Use console.log command to check what is within firstsplittext 0 & 1
+        // Split text again based on the return character (enter key) which leaves us with the business process ie: Terminate: Firstname Lastname
+          var secondSplitText = firstSplitText[1].split(/\n/);
+          var businessProcess = secondSplitText[0];
+          Logger.log("Business Process");
+          Logger.log(businessProcess);
+
+        //set term ticket title 
+        var body='{"ticket": {"subject":"'+effectiveDate+' '+businessProcess+'"}}';
+        Logger.log(body);
+
+
+        var url = 'https://hioscarsupport.zendesk.com/api/v2/tickets/'+ticketNumber;
+            var user = 'usernameHere/token';
+            var pwd = 'tokenHere';
+
+            var headers = { "Content-Type":"application/json",
+            "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+            };
+            var options = { "method":"PUT", 
+            "headers": headers,
+            "contentType": "application/json",
+            "payload": body,
+            "muteHttpExceptions":true
+            };
+            var response = UrlFetchApp.fetch(url, options);
+            Logger.log("this is the subject title we are receiving back from Zendesk");
+            Logger.log(response.getContentText());    
+
+
+
+          //Set tag within ticket to term_title_updated to ensure that the ticket is only changed once to avoid looping or overwriting term titles 
+
+          var data = '{"tags":["term_title_updated"]}';
+
+          //var payload = JSON.stringify(data);
+          console.log("Here is the payload variable after it has been stringified");
+            //Logger.log(payload);
+
+            var url = 'https://hioscarsupport.zendesk.com/api/v2/tickets/'+ticketNumber+'/tags.json';
+            var user = 'usernameHere/token';
+            var pwd = 'tokenHere';
+
+            var headers = { "Content-Type":"application/json",
+            "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+            };
+            var options = { "method":"PUT", 
+            "headers": headers,
+            "contentType": "application/json",
+            "payload": data,
+            "muteHttpExceptions":true
+            };
+            var response = UrlFetchApp.fetch(url, options);
+            Logger.log("this is the response we are receiving back from Zendesk");
+            Logger.log(response.getContentText());
+
+      }catch(err) {
+          console.log("reached catch");
+          console.log(err.message);
+      }
+
+    }//end of loop
+
+    //console.log(ticketArray);
+    
+
+
+    //Logger.log(response.getContentText());
+
+}
+
+//09/30/2022
+function formatDate(date) {
+    var dateArray = date.split("/");
+    var month = dateArray[0];
+    var day = dateArray[1];
+    var year = dateArray[2];
+
+    return [year, month, day].join('-');
+}
