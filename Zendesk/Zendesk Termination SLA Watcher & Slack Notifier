@@ -1,0 +1,201 @@
+//the intention of this script is to check the SLAs on Termination tickets and notify a slack channel when approaching breach
+function checkTerminationTickets() {
+
+    //get tickets
+    var url = 'https://hioscarsupport.zendesk.com/api/v2/search.json?query=form%3A%22termination%20form%22%20status%3Cpending%20custom_field_1500009686181%3A%2A'
+    
+    var user = 'itteamzendesk@hioscar.com/token';
+    var pwd = 'tokenHere';
+
+    var headers = { "Accept":"application/json",
+    "Authorization": "Basic " + Utilities.base64Encode(user + ':' + pwd)
+    };
+    var options = { "method":"Get",
+    "headers": headers,
+    "contentType": "application/json",
+    "muteHttpExceptions":true
+    };
+    var response = UrlFetchApp.fetch(url, options);
+
+    let parsed;
+    var ticketArray;
+
+    try {
+      ticketArray = JSON.parse(response);
+      console.log('✅ JSON array parsed successfully');
+    } catch (err) {
+      console.log('⛔️ invalid JSON provided');
+      // report error
+    }
+
+
+    console.log("found "+ticketArray.results.length+" tickets that match this search.");
+    
+    //act on each ticket
+    //for(var i = 0; i < 1; i++)
+    for(var i = 0; i < ticketArray.results.length; i++)
+    {
+      try {        
+        //add in a last minute check
+
+        var allOK = true;
+
+        var ticket = ticketArray.results[i];
+
+        //get ticket id
+        var ticketNumber = ticket.id;
+        // Logger.log("Ticket Number:");
+        // Logger.log(ticketNumber);
+        console.log("https://hioscarsupport.zendesk.com/agent/tickets/"+ticket.id);
+
+
+        var createdDate = Date.parse(ticket.created_at);
+
+        // console.log("Created Date:");
+        // console.log(createdDate);
+        
+        var nowTime = Date.now();
+
+        // console.log("Now Time:");
+        // console.log(nowTime);
+
+        var hoursSinceTicketCreation = Math.abs(nowTime - createdDate) / 36e5;
+
+        console.log("Hours Since ticket Creation:");
+        console.log(hoursSinceTicketCreation);
+
+        if (hoursSinceTicketCreation < 20){
+          console.log("✅ Ticket creation is not over 20 hours ago");
+          continue;
+        }else{
+          console.log("⚠️ Ticket creation is over 20 hours ago");
+        }
+
+        //are we 23 hours past termination date?
+
+        //get termination date
+
+        var ticketTerminationDate;
+        var ticketTerminationText;
+
+        var ticketCustomFields = ticket.custom_fields;
+        for(var k = 0; k < ticketCustomFields.length; k++)
+        {
+          var ticketCustomField = ticketCustomFields[k];
+          if (ticketCustomField.id == 1500009686181){
+            //console.log (ticketCustomField);
+            // console.log(ticketCustomField.value);
+            // console.log(Date.parse(ticketCustomField.value));
+            //console.log(ticketCustomField.value.length)
+            if (ticketCustomField.value == null){
+                console.log("Found null Date");
+                allOK=false;
+                continue;
+            }else{
+              ticketTerminationDate = Date.parse(ticketCustomField.value);
+              ticketTerminationText = ticketCustomField.value;
+            }
+
+          }
+        }
+        //console.log(ticketCustomFields);
+
+        if (allOK==false){
+          console.log("detected halt");
+          continue;
+        }
+
+        ticketTerminationDate = ticketTerminationDate + (21*60*60*1000);
+
+        // console.log("nowTime");
+        // console.log(nowTime);
+        // console.log("ticketTerminationDate");
+        // console.log(ticketTerminationDate);
+
+        var hoursSinceTicketTerminationDate = (nowTime - ticketTerminationDate) / 36e5;
+
+        console.log("Hours Since ticket Termination Date:");
+        console.log(hoursSinceTicketTerminationDate);
+
+        if (hoursSinceTicketTerminationDate < 20){
+          console.log("✅ Ticket termination date is not over 20 hours ago");
+          continue;
+        }else{
+          console.log("🚨 Ticket termination date is over 20 hours ago");
+        }
+        
+
+        var ticketSubject = ticket.subject;
+        
+        //get user name
+        var firstSplitText = ticketSubject.split('- ');
+        var employeeName = firstSplitText[1];
+        Logger.log("Employee Name");
+        Logger.log(employeeName);
+
+        var breachtime;
+
+        if (hoursSinceTicketTerminationDate<hoursSinceTicketCreation){
+          breachtime = 24-hoursSinceTicketTerminationDate;
+        }else{
+          breachtime = 24-hoursSinceTicketCreation;
+        }
+
+        var breachText = (Math.round(breachtime * 10) / 10).toString();
+
+        //build data for request
+        var data = {
+            "Employee Name": employeeName,
+            "Termination Date": ticketTerminationText,
+            "Time to Breach": breachText,
+            "Ticket Link": "https://hioscarsupport.zendesk.com/agent/tickets/"+ticket.id
+            };
+
+        var payload = JSON.stringify(data);
+        Logger.log(payload);
+
+        var url = 'https://hooks.slack.com/workflows/secretWebhookLink';
+
+        var headers = { "Accept":"application/json"
+        };
+        var options = { "method":"PUT",
+        "headers": headers,
+        "contentType": "application/json",
+        "payload": payload,
+        "muteHttpExceptions":true
+        };
+        var response = UrlFetchApp.fetch(url, options);
+        Logger.log(response.getContentText());
+      
+        //var responseText = response.getContentText();
+    
+        Logger.log("✅ sent");
+
+      
+      }catch(err) {
+          console.log("reached catch");
+          console.log(err.message);
+      }
+
+    }//end of loop
+
+    //console.log(ticketArray);
+    //Logger.log(response.getContentText());
+
+
+
+}
+
+//09/30/2022
+function formatDate(date) {
+    var dateArray = date.split("/");
+    var month = dateArray[0];
+    var day = dateArray[1];
+    var year = dateArray[2];
+
+    return [year, month, day].join('-');
+}
+
+
+
+
